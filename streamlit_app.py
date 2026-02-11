@@ -36,18 +36,25 @@ for i, (cat, p) in enumerate(porc_config.items()):
     cant = round(total_comidas * p)
     cols_p[i].info(f"**{cat}**\n\n{cant} platos")
 
-# 4. CONEXIÓN A TU DRIVE
+# 4. CONEXIÓN A TU DRIVE (VERSIÓN MEJORADA)
 sheet_id = "16QwtVN98phyUd-O1piuR9GnM0BLlcdtjEMM_ozhiXew"
-url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv"
+# Esta URL es más segura para leer datos frescos
+url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv"
 
 try:
     df_db = pd.read_csv(url)
     st.markdown("---")
-    # Aquí buscamos la columna 'PROTEINAS' que hiciste en el Excel
-    opciones = df_db['PROTEINAS'].dropna().unique()
+    
+    # Intentamos buscar la columna 'PROTEINAS'
+    if 'PROTEINAS' in df_db.columns:
+        opciones = df_db['PROTEINAS'].dropna().unique()
+    else:
+        # Si no la encuentra por nombre, agarra la PRIMERA COLUMNA (la A)
+        opciones = df_db.iloc[:, 0].dropna().unique()
+    
     seleccion = st.multiselect("🛒 Selecciona las carnes que tienes en el refri:", options=opciones)
-except:
-    st.error("⚠️ Revisa que tu columna en Excel se llame 'PROTEINAS' y el enlace sea público.")
+except Exception as e:
+    st.error(f"⚠️ Error al leer el Excel. Revisa que el archivo sea público. Detalle: {e}")
 
 # 5. BOTÓN DE DISTRIBUCIÓN
 if st.button("GENERAR CALENDARIO"):
