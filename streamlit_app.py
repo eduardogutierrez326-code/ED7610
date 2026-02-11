@@ -1,11 +1,11 @@
-import streamlit as st
+ import streamlit as st
 import pandas as pd
 from datetime import timedelta
 
-st.set_page_config(page_title="LISTA DE PROTEÍNAS", layout="wide")
-st.title("📋 PLANEADOR DE PROTEÍNAS")
+st.set_page_config(page_title="PLAN DE PROTEÍNAS", layout="wide")
+st.title("📋 CONTADOR Y PLANEADOR DE COCINA")
 
-# 1. ENTRADA DE FECHAS Y CÁLCULO DE COMIDAS
+# 1. ENTRADA DE FECHAS
 col1, col2 = st.columns(2)
 with col1:
     fecha_inicio = st.date_input("FECHA DE INICIO")
@@ -20,10 +20,10 @@ with col2:
 dias_totales = (fecha_final - fecha_inicio).days + 1
 total_comidas = dias_totales * 2
 
-st.info(f"📅 Periodo: {dias_totales} días | Total de comidas a planear: {total_comidas}")
+st.info(f"📅 Periodo: {dias_totales} días | Comidas totales: {total_comidas}")
 
-# 2. TABLA DE PORCENTAJES Y CUOTAS
-st.subheader("📊 Cuotas de Comida por Categoría")
+# 2. CUOTAS CALCULADAS
+st.subheader("📊 Cuotas necesarias (Según tus %)")
 porc_config = {
     "RES (30%)": 0.30, "CERDO (25%)": 0.25, "HUEVO (15%)": 0.15, 
     "POLLO (15%)": 0.15, "PESCADO (5%)": 0.05, "EMBUTIDOS (10%)": 0.10
@@ -36,7 +36,7 @@ for i, (cat, p) in enumerate(porc_config.items()):
     cuotas[cat] = cant
     cols[i].metric(cat.split()[0], f"{cant} platos")
 
-# 3. SELECCIÓN DE PROTEÍNAS DESDE DRIVE
+# 3. SELECCIÓN Y CANTIDADES
 sheet_id = "16QwtVN98phyUd-O1piuR9GnM0BLlcdtjEMM_ozhiXew"
 url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv"
 
@@ -46,36 +46,43 @@ try:
     opciones = df_db[columna_datos].dropna().unique()
     
     st.markdown("---")
-    st.subheader("🛒 Selecciona qué usarás para cubrir tus cuotas:")
+    st.subheader("🛒 ¿Qué tienes en el refri y cuánto?")
     
-    seleccion = st.multiselect("Selecciona todas las carnes que tienes disponibles:", options=opciones)
+    seleccionadas = st.multiselect("Selecciona las proteínas que usarás:", options=opciones)
     
-except:
-    st.error("⚠️ Revisa el enlace de tu Drive.")
+    inventario_usuario = []
+    if seleccionadas:
+        st.write("Indica cuántas veces usarás cada proteína:")
+        # Creamos columnas para que no se vea una lista larga hacia abajo
+        c1, c2 = st.columns(2)
+        for idx, item in enumerate(seleccionadas):
+            with (c1 if idx % 2 == 0 else c2):
+                cantidad = st.number_input(f"Repeticiones para: {item}", min_value=1, max_value=20, value=1, key=item)
+                inventario_usuario.append({"Proteína": item, "Cantidad": cantidad})
 
-# 4. GENERAR LISTA PARA IMPRIMIR
-if st.button("GENERAR LISTA DE COMPRAS/PLANEO"):
-    st.markdown("### 🖨️ RESUMEN PARA LA COCINA")
+except:
+    st.error("⚠️ No se pudo conectar con Drive.")
+
+# 4. TABLA FINAL PARA IMPRIMIR
+if st.button("GENERAR LISTA FINAL PARA EL REFRI"):
+    st.markdown("---")
+    st.subheader("🖨️ LISTA DE DISTRIBUCIÓN LIBRE")
     
-    # Crear una tabla resumen
-    resumen_data = []
-    for cat, cant in cuotas.items():
-        resumen_data.append({
-            "Categoría": cat,
-            "Platos Necesarios": cant,
-            "Sugerencias": "Huevo (15 pzas) / Costilla" if "HUEVO" in cat or "RES" in cat else "Ver lista seleccionada"
-        })
+    # Tabla de lo que tienes vs lo que necesitas
+    df_inventario = pd.DataFrame(inventario_usuario)
+    total_piezas = df_inventario["Cantidad"].sum() if not df_inventario.empty else 0
     
-    st.table(resumen_data)
+    st.table(df_inventario)
     
-    st.markdown("**Proteínas seleccionadas para distribuir libremente:**")
-    for item in seleccion:
-        st.write(f"- [ ] {item}")
-        
-    # Botón para descargar
-    texto_imprimir = f"RESUMEN DE COMIDAS\nDel {fecha_inicio} al {fecha_final}\n\n"
-    for cat, cant in cuotas.items():
-        texto_imprimir += f"{cat}: {cant} comidas\n"
-    texto_imprimir += "\nCARNES SELECCIONADAS:\n" + "\n".join(seleccion)
+    st.write(f"**Total de platos cubiertos con tu selección:** {total_piezas} de {total_comidas} necesarios.")
     
-    st.download_button("Descargar Lista de Planeación", texto_imprimir, "plan_cocina.txt")
+    if total_piezas < total_comidas:
+        st.warning(f"⚠️ Te faltan cubrir {total_comidas - total_piezas} comidas para completar el periodo.")
+    
+    # Formato para imprimir
+    resumen_texto = f"PLAN DE COMIDAS ({fecha_inicio} al {fecha_final})\n"
+    resumen_texto += "-"*30 + "\n"
+    for item in inventario_usuario:
+        resumen_texto += f"[ ] {item['Proteína']} (Usar {item['Cantidad']} veces)\n"
+    
+    st.download_button("Descargar Lista para Imprimir", resumen_texto, "mi_plan_cocina.txt")
