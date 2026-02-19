@@ -1,126 +1,76 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
 
-st.set_page_config(page_title="Agenda de Sobres", layout="wide")
+# Configuración de la página
+st.set_page_config(page_title="Presupuesto Eduardo y Esposa", layout="wide")
 
-st.title("💰 MI AGENDA DE PRESUPUESTO (SOBRES)")
-st.markdown("---")
+# Título de la App
+st.title("📊 Sistema de Gestión de Sobres (1-8-16-24)")
+st.write("Estructura financiera basada en 4 periodos mensuales.")
 
-sheet_id = "16QwtVN98phyUd-O1piuR9GnM0BLlcdtjEMM_ozhiXew"
-nombre_pestaña = "PRESUPUESTO"
-url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={nombre_pestaña}"
+# ID de tu Google Sheet (extraído de tu URL)
+sheet_id = "1K0oQeGA2T5hyd5CoAq6erWV-br0hQj_rdZe-HH3LMSw"
+url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv"
 
-def cargar_datos():
-    try:
-        df = pd.read_csv(url)
-        df.columns = df.columns.str.strip().str.upper()
-        if 'DP' in df.columns:
-            df['DP'] = df['DP'].astype(str).str.strip().str.upper()
-        
-        if 'FECHA DE PAGO' in df.columns:
-            df = df.rename(columns={'FECHA DE PAGO': 'FECHA_REF'})
-        elif 'FECHA' in df.columns:
-            df = df.rename(columns={'FECHA': 'FECHA_REF'})
-        return df
-    except Exception as e:
-        st.error(f"Error al leer el Excel: {e}")
-        return pd.DataFrame()
+# Función para cargar datos
+@st.cache_data
+def load_data():
+    df = pd.read_csv(url)
+    # Limpiar nombres de columnas por si hay espacios
+    df.columns = df.columns.str.strip()
+    # Asegurar que DP sea entero
+    df['DP'] = df['DP'].fillna(0).astype(int)
+    # Asegurar que CANTIDAD sea numérica
+    df['CANTIDAD'] = pd.to_numeric(df['CANTIDAD'], errors='coerce').fillna(0)
+    return df
 
-df_presupuesto = cargar_datos()
+try:
+    df = load_data()
 
-if not df_presupuesto.empty:
-    if 'DP' in df_presupuesto.columns:
-        opciones_dp = sorted([x for x in df_presupuesto['DP'].unique() if str(x).lower() != 'nan'])
-        dp_seleccionado = st.selectbox("📅 SELECCIONA TU DÍA DE PAGO", opciones_dp)
+    # --- BARRA LATERAL (FILTROS) ---
+    st.sidebar.header("Control de Periodo")
+    periodo_seleccionado = st.sidebar.selectbox(
+        "Selecciona el Día de Pago (DP):",
+        options=[1, 8, 16, 24],
+        format_func=lambda x: f"Día de Pago {x}"
+    )
 
-        df_filtrado = df_presupuesto[df_presupuesto['DP'] == dp_seleccionado].copy()
-        
-        if df_filtrado.empty:
-            st.warning(f"No hay datos para {dp_seleccionado}")
-        else:
-            st.subheader(f"📋 Ajusta Fechas y Montos para {dp_seleccionado}")
-            
-            gastos_finales = []
-            with st.form("form_gastos"):
-                for index, row in df_filtrado.iterrows():
-                    col_fecha, col_concepto, col_monto = st.columns([2, 3, 2])
-                    
-                    with col_fecha:
-                        fecha_valida = datetime.now()
-                        if 'FECHA_REF' in row and pd.notnull(row['FECHA_REF']):
-                            try:
-                                fecha_valida = pd.to_datetime(row['FECHA_REF'], dayfirst=True).to_pydatetime()
-                            except:
-                                fecha_valida = datetime.now()
-                        nueva_fecha = st.date_input(f"Fecha: {row['CONCEPTO']}", value=fecha_valida, key=f"date_{index}")
-                    
-                    with col_concepto:
-                        st.write(f"**{row['CONCEPTO']}**")
-                        cat = row['CATEGORIA'] if pd.notnull(row['CATEGORIA']) else "Sin Categoría"
-                        st.caption(f"Categoría: {cat}")
-                    
-                    with col_monto:
-                        try:
-                            valor_limpio = str(row['CANTIDAD']).replace('$', '').replace(',', '').strip()
-                            monto_base = float(valor_limpio) if valor_limpio != 'nan' else 0.0
-                        except:
-                            monto_base = 0.0
-                        
-                        if monto_base <= 0:
-                            valor_monto = st.number_input(f"Monto para {row['CONCEPTO']}", min_value=0.0, step=1.0, key=f"in_{index}")
-                        else:
-                            st.write(f"Fijo: ${monto_base:,.2f}")
-                            valor_monto = monto_base
-                    
-                    gastos_finales.append({
-                        "FECHA": nueva_fecha.strftime('%d/%m/%Y'),
-                        "CONCEPTO": row['CONCEPTO'],
-                        "CATEGORIA": cat,
-                        "CANTIDAD": valor_monto,
-                        "FECHA_OBJ": nueva_fecha
-                    })
-                
-                boton_calcular = st.form_submit_button("📊 GENERAR TOTALES Y SOBRES")
+    # Filtrar datos por el DP seleccionado
+    df_filtrado = df[df['DP'] == periodo_seleccionado]
 
-            if boton_calcular:
-                df_final = pd.DataFrame(gastos_finales).sort_values('FECHA_OBJ')
-                total_general = df_final['CANTIDAD'].sum()
-                
-                st.markdown("---")
-                st.success(f"### 💳 TOTAL A RETIRAR: ${total_general:,.2f}")
-                
-                c1, c2 = st.columns([2, 1])
-                with c1:
-                    st.subheader("📑 Agenda de Pagos")
-                    st.table(df_final[['FECHA', 'CONCEPTO', 'CATEGORIA', 'CANTIDAD']])
-                
-                with c2:
-                    st.subheader("🛍️ Llenado de Sobres")
-                    resumen = df_final.groupby("CATEGORIA")["CANTIDAD"].sum().reset_index()
-                    for _, r in resumen.iterrows():
-                        st.metric(label=r['CATEGORIA'], value=f"${r['CANTIDAD']:,.2f}")
+    # --- DASHBOARD PRINCIPAL ---
+    col1, col2 = st.columns(2)
+    
+    total_periodo = df_filtrado['CANTIDAD'].sum()
 
-                # --- GENERAR TEXTO PARA DESCARGA ---
-                reporte = f"AGENDA DE GASTOS - {dp_seleccionado}\n"
-                reporte += f"Fecha de creación: {datetime.now().strftime('%d/%m/%Y')}\n"
-                reporte += "-"*40 + "\n"
-                for _, r in df_final.iterrows():
-                    reporte += f"[{r['FECHA']}] {r['CONCEPTO']} ({r['CATEGORIA']}): ${r['CANTIDAD']:,.2f}\n"
-                reporte += "-"*40 + "\n"
-                reporte += "RESUMEN DE SOBRES:\n"
-                for _, r in resumen.iterrows():
-                    reporte += f"- {r['CATEGORIA']}: ${r['CANTIDAD']:,.2f}\n"
-                reporte += "-"*40 + "\n"
-                reporte += f"TOTAL A RETIRAR: ${total_general:,.2f}"
+    with col1:
+        st.metric(label=f"Total a cubrir en DP {periodo_seleccionado}", value=f"${total_periodo:,.2f}")
 
-                st.download_button(
-                    label="📥 Descargar Agenda para Imprimir",
-                    data=reporte,
-                    file_name=f"Agenda_{dp_seleccionado}.txt",
-                    mime="text/plain"
-                )
+    with col2:
+        st.info(f"Este presupuesto cubre aproximadamente del día {periodo_seleccionado} al siguiente periodo.")
+
+    # --- TABLA DE GASTOS ---
+    st.subheader(f"📋 Detalle de Gastos - DP {periodo_seleccionado}")
+    
+    if not df_filtrado.empty:
+        # Mostrar tabla limpia
+        st.dataframe(
+            df_filtrado[['GASTO', 'CANTIDAD', 'TEMPORALIDAD', 'OBSERVACIONES']],
+            use_container_width=True,
+            hide_index=True
+        )
     else:
-        st.error("No encontré la columna 'DP'.")
-else:
-    st.info("Conectando con Google Sheets...")
+        st.warning("No hay gastos registrados para este día de pago en el Excel.")
+
+    # --- RESUMEN POR CATEGORÍA ---
+    st.subheader("📝 Resumen por Categoría")
+    resumen_cat = df_filtrado.groupby('TEMPORALIDAD')['CANTIDAD'].sum()
+    st.bar_chart(resumen_cat)
+
+except Exception as e:
+    st.error(f"Error al conectar con el Excel: {e}")
+    st.info("Asegúrate de que el archivo de Google Sheets tenga los permisos de 'Cualquier persona con el enlace puede leer'.")
+
+# Pie de página
+st.markdown("---")
+st.caption("Configuración: DP 1 (Inicio mes) | DP 8 (1er Pago Fuerte) | DP 16 (Provisión Casa) | DP 24 (2do Pago Fuerte)")
