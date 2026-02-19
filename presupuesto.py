@@ -3,7 +3,7 @@ import pandas as pd
 
 st.set_page_config(page_title="Presupuesto Eduardo", layout="wide")
 
-# 1. Función para limpiar el dinero (quita $, comas y espacios)
+# 1. Función para limpiar el dinero
 def limpiar_monto(valor):
     if pd.isna(valor):
         return 0.0
@@ -18,21 +18,16 @@ def limpiar_monto(valor):
 SHEET_ID = "1K0oQeGA2T5hyd5CoAq6erWV-br0hQj_rdZe-HH3LMSw"
 URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
 
-st.title("📊 Mi Presupuesto Dinámico")
+st.title("📊 Mi Presupuesto Semanal")
 
 try:
-    # Leer el CSV
     df = pd.read_csv(URL)
-    
-    # Limpiar nombres de columnas (quita espacios al inicio/final y pasa a mayúsculas)
     df.columns = df.columns.str.strip().str.upper()
     
-    # --- AUTO-CORRECCIÓN DE COLUMNAS ---
-    # Si escribiste "CATIDAD" en lugar de "CANTIDAD", esto lo arregla:
+    # Auto-corrección de columnas
     if 'CATIDAD' in df.columns and 'CANTIDAD' not in df.columns:
         df.rename(columns={'CATIDAD': 'CANTIDAD'}, inplace=True)
     
-    # 3. Limpiar los datos
     if 'CANTIDAD' in df.columns:
         df['CANTIDAD'] = df['CANTIDAD'].apply(limpiar_monto)
     
@@ -40,33 +35,38 @@ try:
         df['DP'] = pd.to_numeric(df['DP'], errors='coerce').fillna(0).astype(int)
 
     # --- INTERFAZ ---
-    st.sidebar.header("Configuración")
-    opciones_dp = sorted(df['DP'].unique())
-    # Filtrar solo los DPs válidos que acordamos (1, 8, 16, 24)
-    opciones_dp = [x for x in opciones_dp if x in [1, 8, 16, 24]]
-    
-    periodo = st.sidebar.selectbox("Selecciona tu Día de Pago:", opciones_dp if opciones_dp else [1, 8, 16, 24])
+    st.sidebar.header("Opciones de Impresión")
+    opciones_dp = [1, 8, 16, 24]
+    periodo = st.sidebar.selectbox("Selecciona DP para imprimir:", opciones_dp)
 
     # Filtrar
     df_periodo = df[df['DP'] == periodo]
-
-    # Mostrar Métricas
     total = df_periodo['CANTIDAD'].sum()
-    st.metric(label=f"Presupuesto para el DP {periodo}", value=f"${total:,.2f}")
 
-    # Mostrar Tabla
+    # --- BOTONES DE DESCARGA ---
+    # Creamos un archivo CSV para que lo abras en Excel e imprimas fácil
+    csv = df_periodo.to_csv(index=False).encode('utf-8')
+    st.sidebar.download_button(
+        label="📥 Descargar para Excel",
+        data=csv,
+        file_name=f'Presupuesto_DP_{periodo}.csv',
+        mime='text/csv',
+    )
+
+    # Visualización
+    st.header(f"Resumen de Gastos - Pago del día {periodo}")
+    st.metric(label="TOTAL A SEPARAR", value=f"${total:,.2f}")
+
     if not df_periodo.empty:
-        st.subheader(f"Gastos del periodo (Día {periodo})")
-        # Seleccionamos solo las columnas que existan para evitar errores
-        cols_a_mostrar = [c for c in ['GASTO', 'CANTIDAD', 'TEMPORALIDAD', 'OBSERVACIONES'] if c in df.columns]
-        st.dataframe(df_periodo[cols_a_mostrar], use_container_width=True, hide_index=True)
+        # Mostramos la tabla
+        st.table(df_periodo[['GASTO', 'CANTIDAD', 'OBSERVACIONES']])
+        
+        st.info("💡 **Tip para imprimir:** Presiona `Ctrl + P` (en Windows) o `Cmd + P` (en Mac) para imprimir esta pantalla directamente.")
     else:
-        st.warning(f"No hay datos para el DP {periodo}. Revisa la columna DP en tu Excel.")
+        st.warning("No hay datos para este DP.")
 
 except Exception as e:
-    st.error("⚠️ Error de conexión")
-    st.write("Verifica que tu Google Sheet tenga activada la opción: **'Cualquier persona con el enlace puede leer'**.")
-    st.info(f"Detalle técnico: {e}")
+    st.error(f"Error: {e}")
 
 st.markdown("---")
-st.caption("Estrategia: 1, 8, 16 y 24")
+st.caption("Estrategia 1-8-16-24 | Eduardo y Esposa")
