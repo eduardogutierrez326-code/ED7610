@@ -3,7 +3,24 @@ import pandas as pd
 
 st.set_page_config(page_title="Presupuesto Eduardo - Sobres", layout="wide")
 
-# 1. Función para limpiar el dinero (quita $, comas y espacios)
+# Estilo CSS para reducir el tamaño de letra en las tarjetas de sobres
+st.markdown("""
+    <style>
+    .stMetric {
+        font-size: 1.2rem !important;
+    }
+    div[data-testid="stMetricValue"] {
+        font-size: 1.5rem !important;
+    }
+    /* Estilo para las cajitas de información (Sobres) */
+    .stAlert {
+        padding: 0.5rem !important;
+        font-size: 0.85rem !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# 1. Función para limpiar el dinero
 def limpiar_monto(valor):
     if pd.isna(valor):
         return 0.0
@@ -21,61 +38,64 @@ URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
 st.title("📊 Gestión de Presupuesto por Sobres")
 
 try:
-    # Leer el CSV
     df = pd.read_csv(URL)
-    
-    # Limpiar nombres de columnas
     df.columns = df.columns.str.strip().str.upper()
     
-    # 3. Limpiar los datos numéricos
+    # Corregir columna CANTIDAD si tiene error de dedo
+    if 'CATIDAD' in df.columns and 'CANTIDAD' not in df.columns:
+        df.rename(columns={'CATIDAD': 'CANTIDAD'}, inplace=True)
+    
     if 'CANTIDAD' in df.columns:
         df['CANTIDAD'] = df['CANTIDAD'].apply(limpiar_monto)
     
     if 'DP' in df.columns:
         df['DP'] = pd.to_numeric(df['DP'], errors='coerce').fillna(0).astype(int)
 
-    # --- INTERFAZ DE FILTROS ---
-    st.sidebar.header("Control de Periodo")
+    # --- INTERFAZ ---
+    st.sidebar.header("Opciones")
     opciones_dp = [1, 8, 16, 24]
     periodo = st.sidebar.selectbox("Selecciona el Día de Pago (DP):", opciones_dp)
 
-    # Filtrar datos por el DP seleccionado
+    # Filtrar datos
     df_periodo = df[df['DP'] == periodo]
     total_periodo = df_periodo['CANTIDAD'].sum()
 
-    # --- MÉTRICA PRINCIPAL ---
+    # Métrica Principal
     st.metric(label=f"Total a cubrir para el DP {periodo}", value=f"${total_periodo:,.2f}")
 
-    # --- RESUMEN POR SOBRES (LO NUEVO) ---
+    # --- RESUMEN POR SOBRES (Letra más pequeña) ---
     st.subheader("💰 Distribución por Sobres")
     if not df_periodo.empty:
-        # Agrupar por la nueva columna SOBRE
         resumen_sobres = df_periodo.groupby('SOBRE')['CANTIDAD'].sum().reset_index()
         
-        # Crear columnas para mostrar los sobres de forma visual
-        cols = st.columns(len(resumen_sobres) if len(resumen_sobres) > 0 else 1)
+        # Mostrar sobres en columnas (hasta 4 por fila para que no se vea gigante)
+        cols = st.columns(4) 
         for i, row in resumen_sobres.iterrows():
-            cols[i % len(cols)].info(f"**{row['SOBRE']}**\n\n${row['CANTIDAD']:,.2f}")
+            with cols[i % 4]:
+                st.info(f"**{row['SOBRE']}**\n\n${row['CANTIDAD']:,.2f}")
     
-    # --- DETALLE DE GASTOS ---
+    # --- DETALLE DE GASTOS Y BOTÓN DE IMPRESIÓN ---
     st.subheader("📋 Detalle de Gastos")
     if not df_periodo.empty:
-        # Mostrar tabla organizada
+        # Tabla estática para que se imprima mejor
         st.table(df_periodo[['SOBRE', 'GASTO', 'CANTIDAD', 'OBSERVACIONES']])
         
-        # Botón para descargar el resumen del DP
+        # Botón de Descarga/Impresión en la barra lateral
         csv = df_periodo.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📥 Descargar lista de este DP",
+        st.sidebar.download_button(
+            label="📥 Descargar para Imprimir (CSV)",
             data=csv,
-            file_name=f'Presupuesto_Sobres_DP_{periodo}.csv',
+            file_name=f'Presupuesto_DP_{periodo}.csv',
             mime='text/csv',
         )
+        st.sidebar.write("---")
+        st.sidebar.info("💡 **Tip:** Presiona `Ctrl + P` para guardar como PDF o imprimir esta vista.")
+
     else:
         st.warning("No hay gastos registrados para este DP.")
 
 except Exception as e:
-    st.error(f"Error al conectar con la base de datos: {e}")
+    st.error(f"Error: {e}")
 
 st.markdown("---")
-st.caption("Sistema de Sobres | Eduardo Gutierrez")
+st.caption("Estrategia 1-8-16-24 | Eduardo Gutierrez")
