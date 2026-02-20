@@ -3,7 +3,7 @@ import pandas as pd
 
 st.set_page_config(page_title="Presupuesto Eduardo - Sobres", layout="wide")
 
-# Estilo CSS para controlar la impresión y el tamaño de letra
+# Estilo CSS para impresión y diseño compacto
 st.markdown("""
     <style>
     /* Estilo para pantalla */
@@ -16,6 +16,8 @@ st.markdown("""
         .no-print { display: none !important; }
         .page-break { page-break-before: always; }
         .stMetric { border: 1px solid #ddd; padding: 10px; margin-bottom: 20px; }
+        /* Forzar que las tablas ocupen el ancho total al imprimir */
+        table { width: 100% !important; }
     }
     </style>
     """, unsafe_allow_html=True)
@@ -36,6 +38,7 @@ try:
     df = pd.read_csv(URL)
     df.columns = df.columns.str.strip().str.upper()
     
+    # Corregir columna CANTIDAD si tiene error de dedo en Excel
     if 'CATIDAD' in df.columns and 'CANTIDAD' not in df.columns:
         df.rename(columns={'CATIDAD': 'CANTIDAD'}, inplace=True)
     
@@ -57,7 +60,7 @@ try:
     st.subheader("Distribución para Sobres")
     if not df_periodo.empty:
         resumen_sobres = df_periodo.groupby('SOBRE')['CANTIDAD'].sum().reset_index()
-        cols = st.columns(3) # 3 columnas para que los nombres se lean bien
+        cols = st.columns(3)
         for i, row in resumen_sobres.iterrows():
             with cols[i % 3]:
                 st.info(f"**{row['SOBRE']}**\n\n${row['CANTIDAD']:,.2f}")
@@ -65,18 +68,22 @@ try:
     # --- SALTO DE PÁGINA PARA IMPRESIÓN ---
     st.markdown('<div class="page-break"></div>', unsafe_allow_html=True)
 
-    # --- HOJA 2: DETALLE DE GASTOS ---
-    st.subheader(f"📋 Detalle de Gastos (DP {periodo})")
+    # --- HOJA 2: DETALLE DE GASTOS (CON TEMPORALIDAD) ---
+    st.subheader(f"📋 Informe Detallado de Gastos (DP {periodo})")
     if not df_periodo.empty:
-        # Usamos table para que sea 100% compatible con impresión
-        st.table(df_periodo[['SOBRE', 'GASTO', 'CANTIDAD', 'OBSERVACIONES']])
+        # Aquí añadimos la columna TEMPORALIDAD a la tabla
+        columnas_finales = ['SOBRE', 'GASTO', 'CANTIDAD', 'TEMPORALIDAD', 'OBSERVACIONES']
+        # Verificamos que todas existan para evitar errores
+        columnas_disponibles = [c for c in columnas_finales if c in df_periodo.columns]
         
-        # Botón de descarga (solo visible en pantalla)
+        st.table(df_periodo[columnas_disponibles])
+        
+        # Botón de descarga
         csv = df_periodo.to_csv(index=False).encode('utf-8')
         st.sidebar.download_button(
             label="📥 Descargar CSV",
             data=csv,
-            file_name=f'Detalle_DP_{periodo}.csv',
+            file_name=f'Plan_Detallado_DP_{periodo}.csv',
             mime='text/csv',
         )
     else:
@@ -86,4 +93,4 @@ except Exception as e:
     st.error(f"Error: {e}")
 
 st.sidebar.write("---")
-st.sidebar.warning("💡 **Para imprimir:** Presiona **Ctrl+P** y asegúrate de que 'Gráficos de fondo' esté activado en los ajustes de impresión.")
+st.sidebar.info("💡 **Impresión Profesional:**\n1. Selecciona el DP\n2. Presiona Ctrl+P\n3. Verás que los Sobres quedan en la pág. 1 y el Detalle en la pág. 2.")
