@@ -3,44 +3,22 @@ import pandas as pd
 import random
 import re
 from datetime import timedelta
+import streamlit.components.v1 as components # Importante para el botón
 
 st.set_page_config(page_title="Calendario de Ejecución", layout="wide")
 
-# --- ESTILO PARA IMPRESIÓN (OCULTA TODO MENOS LA TABLA) ---
+# --- ESTILO PARA IMPRESIÓN ---
 st.markdown("""
     <style>
     @media print {
-        /* Ocultar elementos de Streamlit al imprimir */
-        header, footer, .stSidebar, .stButton, .stTextArea, .stMarkdown, [data-testid="stHeader"] {
+        header, footer, .stSidebar, .stButton, .stTextArea, .stMarkdown, [data-testid="stHeader"], .print-btn-container {
             display: none !important;
         }
         .main .block-container {
             padding-top: 0rem !important;
             margin: 0 !important;
         }
-        /* Hacer la tabla más legible en papel */
-        table {
-            width: 100% !important;
-            font-size: 12pt !important;
-            color: black !important;
-        }
-        h2 {
-            text-align: center !important;
-            margin-bottom: 20px !important;
-        }
-    }
-    /* Estilo del botón de imprimir personalizado */
-    .print-button {
-        background-color: #FF4B4B;
-        color: white;
-        padding: 10px 20px;
-        border: none;
-        border-radius: 5px;
-        cursor: pointer;
-        font-weight: bold;
-        text-decoration: none;
-        display: inline-block;
-        margin: 10px 0;
+        table { width: 100% !important; font-size: 12pt !important; }
     }
     </style>
     """, unsafe_allow_html=True)
@@ -80,7 +58,6 @@ if st.button("GENERAR CALENDARIO"):
             nombre = linea.replace("[ ]", "").split("(")[0].strip()
             cant_match = re.search(r'(\d+)\s+servicio', linea_upper)
             cant = int(cant_match.group(1)) if cant_match else 1
-            
             for _ in range(cant):
                 inventario.append({"Platillo": nombre, "Cat": cat})
 
@@ -92,47 +69,41 @@ if st.button("GENERAR CALENDARIO"):
         calendario = []
 
         for i, fecha in enumerate(rango_fechas):
-            desayuno = "Libre"
-            cat_des = "LIBRE"
+            desayuno = "Libre"; cat_des = "LIBRE"
             if desayunables:
-                item = desayunables.pop(0)
-                desayuno = item['Platillo']
-                cat_des = item['Cat']
+                item = desayunables.pop(0); desayuno = item['Platillo']; cat_des = item['Cat']
             elif platos_fuertes:
-                item = platos_fuertes.pop(0)
-                desayuno = item['Platillo']
-                cat_des = item['Cat']
+                item = platos_fuertes.pop(0); desayuno = item['Platillo']; cat_des = item['Cat']
 
             comida = "Recalentado"
             encontrado = False
             for idx, p in enumerate(platos_fuertes):
                 if p['Cat'] != cat_des:
-                    item = platos_fuertes.pop(idx)
-                    comida = item['Platillo']
-                    encontrado = True
-                    break
+                    item = platos_fuertes.pop(idx); comida = item['Platillo']; encontrado = True; break
             if not encontrado and platos_fuertes:
-                item = platos_fuertes.pop(0)
-                comida = item['Platillo']
+                item = platos_fuertes.pop(0); comida = item['Platillo']
 
-            calendario.append({
-                "Fecha": fecha.strftime('%d/%m'),
-                "Día": fecha.strftime('%A'),
-                "DESAYUNO": desayuno,
-                "COMIDA": comida
-            })
+            calendario.append({"Fecha": fecha.strftime('%d/%m'), "Día": fecha.strftime('%A'), "DESAYUNO": desayuno, "COMIDA": comida})
 
         st.markdown("---")
-        # Este es el título que sí saldrá en la impresión
         st.markdown(f"## 📋 MENÚ DEL {fecha_inicio.strftime('%d/%m')} AL {fecha_final.strftime('%d/%m')}")
         
         df_final = pd.DataFrame(calendario)
         st.table(df_final)
 
-        # --- BOTÓN DE IMPRESIÓN REAL (JAVASCRIPT) ---
-        st.markdown('<button class="print-button" onclick="window.print()">🖨️ CLIC AQUÍ PARA IMPRIMIR O GUARDAR PDF</button>', unsafe_allow_html=True)
+        # --- BOTÓN DE IMPRESIÓN MEJORADO ---
+        st.write("Presiona el botón de abajo para imprimir o guardar como PDF:")
+        components.html("""
+            <script>
+                function imprimir() {
+                    window.parent.print();
+                }
+            </script>
+            <button onclick="imprimir()" style="background-color: #FF4B4B; color: white; padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold; width: 100%;">
+                🖨️ ABRIR VENTANA DE IMPRESIÓN (Ctrl+P)
+            </button>
+        """, height=70)
         
         st.download_button("📥 DESCARGAR EXCEL (CSV)", df_final.to_csv(index=False).encode('utf-8'), "menu.csv")
-            
     else:
         st.error("Pega la lista para organizar.")
