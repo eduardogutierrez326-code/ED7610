@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 from datetime import timedelta
 
-st.set_page_config(page_title="PLANEADOR DE PROTEÍNAS", layout="wide")
-st.title("📋 PLANEADOR DE PROTEÍNAS - PORCENTAJES ACTUALIZADOS")
+st.set_page_config(page_title="PLANEADOR AUTOMÁTICO", layout="wide")
+st.title("🍽️ ASIGNADOR DE MENÚ (CONTROL DE GASTO)")
 
 # 1. ENTRADA DE FECHAS
 col1, col2 = st.columns(2)
@@ -20,104 +20,99 @@ with col2:
 dias_totales = (fecha_final - fecha_inicio).days + 1
 total_comidas = (dias_totales * 2)
 
-# 2. CUOTAS ACTUALIZADAS (Nuevos porcentajes solicitados)
-st.subheader(f"📊 Cuotas para {total_comidas} platos totales")
+# 2. CUOTAS FIJAS (Basadas en tus porcentajes de ahorro)
 porc_config = {
-    "RES": 0.20,      # Bajó al 20%
-    "CERDO": 0.25,    # 25%
-    "HUEVO": 0.15,    # 15%
-    "POLLO": 0.15,    # 15%
-    "PESCADO": 0.05,  # 5%
-    "EMBUTIDOS": 0.15 # Subió al 15%
+    "RES": 0.20, "CERDO": 0.25, "HUEVO": 0.15, 
+    "POLLO": 0.15, "PESCADO": 0.05, "EMBUTIDOS": 0.15
 }
 
-cuotas = {}
+cuotas = {cat: round(total_comidas * p) for cat, p in porc_config.items()}
+
+# Mostrar métricas de cuotas
+st.subheader(f"📊 Tienes {total_comidas} platos para asignar")
 cols = st.columns(6)
-for i, (cat, p) in enumerate(porc_config.items()):
-    cant = round(total_comidas * p)
-    cuotas[cat] = cant
+for i, (cat, cant) in enumerate(cuotas.items()):
     cols[i].metric(cat, f"{cant} platos")
 
-# 3. CONEXIÓN A LAS PESTAÑAS DE DRIVE
+# 3. FUNCIÓN DE LECTURA
 def leer_pestaña(sheet_id, nombre_pestaña):
     url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={nombre_pestaña}"
     try:
         df = pd.read_csv(url)
-        # Limpiar espacios y quitar nulos
-        df.columns = df.columns.str.strip()
-        return df.iloc[:, 0].dropna().unique()
+        return df.iloc[:, 0].dropna().unique().tolist()
     except:
         return []
 
 sheet_id = "16QwtVN98phyUd-O1piuR9GnM0BLlcdtjEMM_ozhiXew"
 
 st.markdown("---")
-st.subheader("🛒 Selecciona tus carnes por categoría")
+st.subheader("📝 Arma tu menú (1 platillo = 1 unidad)")
 
-# Inventario donde guardaremos todo
 inventario_final = []
 
-# AGREGAR HUEVOS AUTOMÁTICAMENTE
+# Autocompletar HUEVOS
 if cuotas["HUEVO"] > 0:
-    inventario_final.append({"Proteína": "HUEVOS (Servicios)", "Cat": "HUEVO", "Cantidad": cuotas["HUEVO"]})
-    st.success(f"✅ Se han añadido {cuotas['HUEVO']} servicios de Huevo automáticamente.")
+    inventario_final.append({"Platillo": "HUEVOS (Varios estilos)", "Categoría": "HUEVO", "Cantidad": cuotas["HUEVO"]})
+    st.success(f"🥚 {cuotas['HUEVO']} servicios de Huevo asignados automáticamente.")
 
-# SELECTORES DE COMIDAS (Igual que el código funcional original)
+# SELECTORES SIN ENTRADA MANUAL DE NÚMEROS
 c1, c2, c3 = st.columns(3)
+
 with c1:
     res_list = leer_pestaña(sheet_id, "RES")
-    res_sel = st.multiselect(f"RES (Necesitas {cuotas['RES']})", options=res_list)
+    res_sel = st.multiselect(f"RES (Elige {cuotas['RES']} platillos)", options=res_list)
     for r in res_sel:
-        cant = st.number_input(f"¿Cuántas comidas de {r}?", min_value=1, value=1, key=f"res_{r}")
-        inventario_final.append({"Proteína": r, "Cat": "RES", "Cantidad": cant})
+        inventario_final.append({"Platillo": r, "Categoría": "RES", "Cantidad": 1})
 
 with c2:
     cerdo_list = leer_pestaña(sheet_id, "CERDO")
-    cerdo_sel = st.multiselect(f"CERDO (Necesitas {cuotas['CERDO']})", options=cerdo_list)
+    cerdo_sel = st.multiselect(f"CERDO (Elige {cuotas['CERDO']} platillos)", options=cerdo_list)
     for c in cerdo_sel:
-        cant = st.number_input(f"¿Cuántas comidas de {c}?", min_value=1, value=1, key=f"cer_{c}")
-        inventario_final.append({"Proteína": c, "Cat": "CERDO", "Cantidad": cant})
+        inventario_final.append({"Platillo": c, "Categoría": "CERDO", "Cantidad": 1})
 
 with c3:
     pollo_list = leer_pestaña(sheet_id, "POLLO")
-    pollo_sel = st.multiselect(f"POLLO (Necesitas {cuotas['POLLO']})", options=pollo_list)
+    pollo_sel = st.multiselect(f"POLLO (Elige {cuotas['POLLO']} platillos)", options=pollo_list)
     for p in pollo_sel:
-        cant = st.number_input(f"¿Cuántas comidas de {p}?", min_value=1, value=1, key=f"pol_{p}")
-        inventario_final.append({"Proteína": p, "Cat": "POLLO", "Cantidad": cant})
+        inventario_final.append({"Platillo": p, "Categoría": "POLLO", "Cantidad": 1})
 
 c4, c5 = st.columns(2)
 with c4:
     emb_list = leer_pestaña(sheet_id, "EMBUTIDOS")
-    emb_sel = st.multiselect(f"EMBUTIDOS (Necesitas {cuotas['EMBUTIDOS']})", options=emb_list)
+    emb_sel = st.multiselect(f"EMBUTIDOS (Elige {cuotas['EMBUTIDOS']} platillos)", options=emb_list)
     for e in emb_sel:
-        cant = st.number_input(f"¿Cuántas comidas de {e}?", min_value=1, value=1, key=f"emb_{e}")
-        inventario_final.append({"Proteína": e, "Cat": "EMBUTIDOS", "Cantidad": cant})
+        inventario_final.append({"Platillo": e, "Categoría": "EMBUTIDOS", "Cantidad": 1})
 
 with c5:
     pes_list = leer_pestaña(sheet_id, "PESCADO")
-    pes_sel = st.multiselect(f"PESCADO (Necesitas {cuotas['PESCADO']})", options=pes_list)
+    pes_sel = st.multiselect(f"PESCADO (Elige {cuotas['PESCADO']} platillos)", options=pes_list)
     for pe in pes_sel:
-        cant = st.number_input(f"¿Cuántas comidas de {pe}?", min_value=1, value=1, key=f"pes_{pe}")
-        inventario_final.append({"Proteína": pe, "Cat": "PESCADO", "Cantidad": cant})
+        inventario_final.append({"Platillo": pe, "Categoría": "PESCADO", "Cantidad": 1})
 
-# 4. BOTÓN FINAL Y REPORTE
+# 4. VALIDACIÓN Y GENERACIÓN
 st.markdown("---")
-if st.button("GENERAR MI LISTA FINAL"):
-    st.markdown("### 🖨️ LISTA DE DISTRIBUCIÓN")
+if st.button("FINALIZAR Y GENERAR LISTA"):
     if inventario_final:
-        df_inv = pd.DataFrame(inventario_final)
-        st.table(df_inv)
+        df_resumen = pd.DataFrame(inventario_final)
         
-        total_p = df_inv["Cantidad"].sum()
-        st.write(f"**Total de platos cubiertos:** {total_p} de {total_comidas}")
+        # Agrupar por si eligieron el mismo platillo varias veces
+        df_final = df_resumen.groupby(['Platillo', 'Categoría']).sum().reset_index()
         
-        if total_p < total_comidas:
-            st.warning(f"⚠️ Faltan {total_comidas - total_p} platos para completar el periodo.")
+        st.table(df_final)
         
-        # Generar texto para imprimir
-        txt = f"PLAN DE PROTEÍNAS ({fecha_inicio} al {fecha_final})\n"
+        total_asignado = df_final["Cantidad"].sum()
+        
+        if total_asignado > total_comidas:
+            st.error(f"🚨 Te pasaste por {total_asignado - total_comidas} platos. Revisa tus selecciones.")
+        elif total_asignado < total_comidas:
+            st.warning(f"⚠️ Te faltan {total_comidas - total_asignado} platos por asignar.")
+        else:
+            st.success("🎯 ¡Perfecto! Menú completo y dentro del presupuesto.")
+
+        # Texto para descarga
+        txt = f"LISTA DE COCINA ({fecha_inicio} al {fecha_final})\n"
         txt += "="*40 + "\n"
-        for item in inventario_final:
-            txt += f"[ ] {item['Proteína']} - {item['Cantidad']} veces ({item['Cat']})\n"
+        for _, row in df_final.iterrows():
+            txt += f"[ ] {row['Platillo']} ({row['Cantidad']} servicios)\n"
         
-        st.download_button("Descargar Plan para Imprimir", txt, "plan_comidas.txt")
+        st.download_button("Descargar Plan", txt, "plan_cocina.txt")
