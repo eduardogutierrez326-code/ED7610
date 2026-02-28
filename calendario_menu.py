@@ -6,7 +6,7 @@ from datetime import timedelta
 
 st.set_page_config(page_title="Calendario de Ejecución", layout="wide")
 
-st.title("📅 DISTRIBUIDOR INTELIGENTE DE COMIDAS")
+st.title("📅 DISTRIBUIDOR DE MENÚ POR LISTA REAL")
 
 # 1. CONFIGURACIÓN
 st.sidebar.header("Configuración")
@@ -14,8 +14,8 @@ fecha_inicio = st.sidebar.date_input("Fecha de Inicio", value=pd.to_datetime("to
 dias_plan = st.sidebar.number_input("Días a planear", min_value=1, value=15)
 fecha_fin = fecha_inicio + timedelta(days=dias_plan-1)
 
-st.subheader("1. Pega aquí tu lista de la App anterior")
-datos_input = st.text_area("Copia y pega la lista generada:", height=250)
+st.subheader("1. Pega tu lista (HUEVO 1, HUEVO 2, etc.)")
+datos_input = st.text_area("Copia y pega aquí:", height=250)
 
 if st.button("GENERAR CALENDARIO"):
     if datos_input:
@@ -25,8 +25,9 @@ if st.button("GENERAR CALENDARIO"):
         for linea in lineas:
             linea_upper = linea.upper()
             
-            # --- DETECTOR INTELIGENTE DE CATEGORÍAS ---
-            cat = "FUERTE" # Default
+            # --- DETECTOR DE CATEGORÍAS ---
+            # Ahora el HUEVO entra al inventario normal, no tiene regla aparte
+            cat = "FUERTE" 
             if "HUEVO" in linea_upper: cat = "HUEVO"
             elif "CEMEX" in linea_upper: cat = "EMBUTIDOS"
             elif "RES" in linea_upper: cat = "RES"
@@ -34,62 +35,59 @@ if st.button("GENERAR CALENDARIO"):
             elif "POLLO" in linea_upper: cat = "POLLO"
             elif "PES" in linea_upper or "CAMARON" in linea_upper: cat = "PESCADO"
 
-            # Extraer el nombre del platillo
+            # Limpiar nombre
             nombre = linea.replace("[ ]", "").split("(")[0].strip()
             
-            # Extraer cantidad de servicios
+            # Detectar cuántos servicios
             cant_match = re.search(r'(\d+)\s+servicio', linea_upper)
             cant = int(cant_match.group(1)) if cant_match else 1
             
-            # Si es huevo, no lo metemos al pool de "fuertes" porque tiene su propia regla
-            if cat != "HUEVO":
-                for _ in range(cant):
-                    inventario.append({"Platillo": nombre, "Cat": cat})
+            # Metemos todo al mismo costal para repartir
+            for _ in range(cant):
+                inventario.append({"Platillo": nombre, "Cat": cat})
 
-        # --- REGLAS DE DISTRIBUCIÓN ---
-        embutidos = [p for p in inventario if p['Cat'] == 'EMBUTIDOS']
-        fuertes = [p for p in inventario if p['Cat'] != 'EMBUTIDOS']
+        # --- REGLAS DE DISTRIBUCIÓN LIMPIA ---
+        # Mezclamos todo el inventario
+        random.shuffle(inventario)
         
-        random.shuffle(fuertes)
-        random.shuffle(embutidos)
+        # Priorizamos Embutidos y Huevos para el desayuno
+        desayunables = [p for p in inventario if p['Cat'] in ['HUEVO', 'EMBUTIDOS']]
+        platos_fuertes = [p for p in inventario if p['Cat'] not in ['HUEVO', 'EMBUTIDOS']]
         
         rango_fechas = pd.date_range(fecha_inicio, fecha_fin)
         calendario = []
 
         for i, fecha in enumerate(rango_fechas):
-            # --- REGLA DESAYUNO ---
-            desayuno = ""
-            cat_des = ""
+            # --- ASIGNAR DESAYUNO ---
+            desayuno = "Desayuno Libre"
+            cat_des = "LIBRE"
             
-            if i % 2 == 0: # Día sí, día no
-                desayuno = "🍳 HUEVOS AL GUSTO"
-                cat_des = "HUEVO"
-            elif embutidos:
-                item = embutidos.pop(0)
-                desayuno = f"🥪 {item['Platillo']}"
-                cat_des = "EMBUTIDOS"
-            elif fuertes:
-                item = fuertes.pop(0)
-                desayuno = f"🌅 {item['Platillo']}"
+            if desayunables:
+                item = desayunables.pop(0)
+                desayuno = item['Platillo']
                 cat_des = item['Cat']
-            else:
-                desayuno = "☕ Desayuno Ligero"
+            elif platos_fuertes:
+                # Si se acaban los huevos/embutidos, desayunamos lo que haya
+                item = platos_fuertes.pop(0)
+                desayuno = item['Platillo']
+                cat_des = item['Cat']
 
-            # --- REGLA COMIDA ---
-            comida = ""
-            cat_com = ""
+            # --- ASIGNAR COMIDA ---
+            comida = "Recalentado / Complemento"
+            cat_com = "LIBRE"
             
-            encontrado = False
-            for idx, p in enumerate(fuertes):
-                if p['Cat'] != cat_des: # Que no se repita proteína en el mismo día
-                    item = fuertes.pop(idx)
-                    comida = f"🍲 {item['Platillo']}"
+            # Buscamos algo que no sea la misma proteína que el desayuno de hoy
+            for idx, p in enumerate(platos_fuertes):
+                if p['Cat'] != cat_des:
+                    item = platos_fuertes.pop(idx)
+                    comida = item['Platillo']
                     cat_com = item['Cat']
-                    encontrado = True
                     break
             
-            if not encontrado:
-                comida = "🔄 Recalentado / Complemento"
+            # Si no encontramos algo diferente, tomamos lo que sea que quede
+            if comida == "Recalentado / Complemento" and platos_fuertes:
+                item = platos_fuertes.pop(0)
+                comida = item['Platillo']
 
             calendario.append({
                 "Fecha": fecha.strftime('%d/%m'),
@@ -104,4 +102,4 @@ if st.button("GENERAR CALENDARIO"):
         st.table(df_final)
         
     else:
-        st.error("Por favor pega la lista primero.")
+        st.error("Pega la lista para organizar.")
