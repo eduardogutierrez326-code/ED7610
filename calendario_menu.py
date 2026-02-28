@@ -3,22 +3,47 @@ import pandas as pd
 import random
 import re
 from datetime import timedelta
-import streamlit.components.v1 as components # Importante para el botón
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Calendario de Ejecución", layout="wide")
 
-# --- ESTILO PARA IMPRESIÓN ---
+# --- ESTILO PARA IMPRESIÓN (LIMPIEZA DE COLORES NEGROS) ---
 st.markdown("""
     <style>
     @media print {
+        /* FORZAR FONDO BLANCO Y LETRAS NEGRAS */
+        html, body, .main, .block-container {
+            background-color: white !important;
+            color: black !important;
+        }
+        
+        /* OCULTAR ELEMENTOS INNECESARIOS */
         header, footer, .stSidebar, .stButton, .stTextArea, .stMarkdown, [data-testid="stHeader"], .print-btn-container {
             display: none !important;
         }
-        .main .block-container {
-            padding-top: 0rem !important;
-            margin: 0 !important;
+
+        /* AJUSTAR TABLA PARA PAPEL */
+        table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+            background-color: white !important;
+            color: black !important;
         }
-        table { width: 100% !important; font-size: 12pt !important; }
+        th {
+            background-color: #f0f0f0 !important;
+            color: black !important;
+            border: 1px solid #ddd !important;
+        }
+        td {
+            border: 1px solid #ddd !important;
+            color: black !important;
+        }
+        
+        h2 {
+            text-align: center !important;
+            color: black !important;
+            margin-top: 0 !important;
+        }
     }
     </style>
     """, unsafe_allow_html=True)
@@ -92,7 +117,6 @@ if st.button("GENERAR CALENDARIO"):
         st.table(df_final)
 
         # --- BOTÓN DE IMPRESIÓN MEJORADO ---
-        st.write("Presiona el botón de abajo para imprimir o guardar como PDF:")
         components.html("""
             <script>
                 function imprimir() {
@@ -100,10 +124,9 @@ if st.button("GENERAR CALENDARIO"):
                 }
             </script>
             <button onclick="imprimir()" style="background-color: #FF4B4B; color: white; padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold; width: 100%;">
-                🖨️ ABRIR VENTANA DE IMPRESIÓN (Ctrl+P)
+                🖨️ GENERAR PDF / IMPRIMIR (Fondo Blanco)
             </button>
         """, height=70)
         
-        st.download_button("📥 DESCARGAR EXCEL (CSV)", df_final.to_csv(index=False).encode('utf-8'), "menu.csv")
     else:
         st.error("Pega la lista para organizar.")
