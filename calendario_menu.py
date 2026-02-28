@@ -6,28 +6,61 @@ from datetime import timedelta
 
 st.set_page_config(page_title="Calendario de Ejecución", layout="wide")
 
-st.title("📅 DISTRIBUIDOR DE MENÚ POR LISTA REAL")
+# --- ESTILO PARA IMPRESIÓN (OCULTA TODO MENOS LA TABLA) ---
+st.markdown("""
+    <style>
+    @media print {
+        /* Ocultar elementos de Streamlit al imprimir */
+        header, footer, .stSidebar, .stButton, .stTextArea, .stMarkdown, [data-testid="stHeader"] {
+            display: none !important;
+        }
+        .main .block-container {
+            padding-top: 0rem !important;
+            margin: 0 !important;
+        }
+        /* Hacer la tabla más legible en papel */
+        table {
+            width: 100% !important;
+            font-size: 12pt !important;
+            color: black !important;
+        }
+        h2 {
+            text-align: center !important;
+            margin-bottom: 20px !important;
+        }
+    }
+    /* Estilo del botón de imprimir personalizado */
+    .print-button {
+        background-color: #FF4B4B;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-weight: bold;
+        text-decoration: none;
+        display: inline-block;
+        margin: 10px 0;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-# 1. ENTRADA DE FECHAS (INICIO Y FIN)
-st.sidebar.header("🗓️ Configuración del Periodo")
+st.title("📅 DISTRIBUIDOR DE MENÚ")
+
+# 1. ENTRADA DE FECHAS
+st.sidebar.header("🗓️ Configuración")
 fecha_inicio = st.sidebar.date_input("FECHA DE INICIO", value=pd.to_datetime("today"))
-fecha_final = st.sidebar.date_input("FECHA FINAL", value=fecha_inicio + timedelta(days=14))
+fecha_final = st.sidebar.date_input("FECHA FINAL", value=fecha_inicio + timedelta(days=13))
 
-# Cálculo de días y platos necesarios
 dias_totales = (fecha_final - fecha_inicio).days + 1
 servicios_necesarios = dias_totales * 2
 
-st.sidebar.markdown("---")
-st.sidebar.metric("Días Totales", f"{dias_totales} días")
-st.sidebar.metric("Platos requeridos", f"{servicios_necesarios} platos")
-
-if dias_totales <= 0:
-    st.error("La fecha final debe ser posterior a la fecha de inicio.")
+st.sidebar.metric("Días Totales", f"{dias_totales}")
+st.sidebar.metric("Platos requeridos", f"{servicios_necesarios}")
 
 # 2. CARGA DE DATOS
 st.subheader("1. Pega tu lista de platillos")
-st.info(f"Para cubrir este periodo necesitas {servicios_necesarios} servicios en total.")
-datos_input = st.text_area("Copia y pega la lista aquí:", height=250)
+datos_input = st.text_area("Copia y pega la lista aquí:", height=150)
 
 if st.button("GENERAR CALENDARIO"):
     if datos_input:
@@ -36,8 +69,6 @@ if st.button("GENERAR CALENDARIO"):
         
         for linea in lineas:
             linea_upper = linea.upper()
-            
-            # --- DETECTOR DE CATEGORÍAS ---
             cat = "FUERTE" 
             if "HUEVO" in linea_upper: cat = "HUEVO"
             elif "CEMEX" in linea_upper: cat = "EMBUTIDOS"
@@ -47,17 +78,13 @@ if st.button("GENERAR CALENDARIO"):
             elif "PES" in linea_upper or "CAMARON" in linea_upper: cat = "PESCADO"
 
             nombre = linea.replace("[ ]", "").split("(")[0].strip()
-            
             cant_match = re.search(r'(\d+)\s+servicio', linea_upper)
             cant = int(cant_match.group(1)) if cant_match else 1
             
             for _ in range(cant):
                 inventario.append({"Platillo": nombre, "Cat": cat})
 
-        # --- REGLAS DE DISTRIBUCIÓN ---
         random.shuffle(inventario)
-        
-        # Separar para priorizar desayunos
         desayunables = [p for p in inventario if p['Cat'] in ['HUEVO', 'EMBUTIDOS']]
         platos_fuertes = [p for p in inventario if p['Cat'] not in ['HUEVO', 'EMBUTIDOS']]
         
@@ -65,10 +92,8 @@ if st.button("GENERAR CALENDARIO"):
         calendario = []
 
         for i, fecha in enumerate(rango_fechas):
-            # --- ASIGNAR DESAYUNO ---
-            desayuno = "Desayuno Libre"
+            desayuno = "Libre"
             cat_des = "LIBRE"
-            
             if desayunables:
                 item = desayunables.pop(0)
                 desayuno = item['Platillo']
@@ -78,18 +103,15 @@ if st.button("GENERAR CALENDARIO"):
                 desayuno = item['Platillo']
                 cat_des = item['Cat']
 
-            # --- ASIGNAR COMIDA ---
-            comida = "Recalentado / Complemento"
-            cat_com = "LIBRE"
-            
+            comida = "Recalentado"
+            encontrado = False
             for idx, p in enumerate(platos_fuertes):
                 if p['Cat'] != cat_des:
                     item = platos_fuertes.pop(idx)
                     comida = item['Platillo']
-                    cat_com = item['Cat']
+                    encontrado = True
                     break
-            
-            if comida == "Recalentado / Complemento" and platos_fuertes:
+            if not encontrado and platos_fuertes:
                 item = platos_fuertes.pop(0)
                 comida = item['Platillo']
 
@@ -100,16 +122,17 @@ if st.button("GENERAR CALENDARIO"):
                 "COMIDA": comida
             })
 
-        # --- TABLA FINAL ---
         st.markdown("---")
-        st.subheader(f"📋 Plan del {fecha_inicio.strftime('%d/%m')} al {fecha_final.strftime('%d/%m')}")
+        # Este es el título que sí saldrá en la impresión
+        st.markdown(f"## 📋 MENÚ DEL {fecha_inicio.strftime('%d/%m')} AL {fecha_final.strftime('%d/%m')}")
+        
         df_final = pd.DataFrame(calendario)
         st.table(df_final)
+
+        # --- BOTÓN DE IMPRESIÓN REAL (JAVASCRIPT) ---
+        st.markdown('<button class="print-button" onclick="window.print()">🖨️ CLIC AQUÍ PARA IMPRIMIR O GUARDAR PDF</button>', unsafe_allow_html=True)
         
-        # Check de balance
-        servicios_usados = len(inventario)
-        if servicios_usados < servicios_necesarios:
-            st.warning(f"⚠️ Nota: Solo tenías {servicios_usados} servicios para {servicios_necesarios} espacios. Los huecos se llenaron con 'Libre/Recalentado'.")
-        
+        st.download_button("📥 DESCARGAR EXCEL (CSV)", df_final.to_csv(index=False).encode('utf-8'), "menu.csv")
+            
     else:
-        st.error("Pega la lista para organizar el calendario.")
+        st.error("Pega la lista para organizar.")
