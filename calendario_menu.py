@@ -15,83 +15,81 @@ dias_plan = st.sidebar.number_input("Días a planear", min_value=1, value=15)
 fecha_fin = fecha_inicio + timedelta(days=dias_plan-1)
 
 st.subheader("1. Pega aquí tu lista de la App anterior")
-datos_input = st.text_area("Copia y pega la lista tal cual te la dio la otra app:", height=250)
+datos_input = st.text_area("Copia y pega la lista generada:", height=250)
 
 if st.button("GENERAR CALENDARIO"):
     if datos_input:
-        # --- NUEVO PROCESADOR DE TEXTO (Limpia los [ ] y detecta categoría) ---
         inventario = []
         lineas = datos_input.strip().split('\n')
         
         for linea in lineas:
-            # Buscamos el platillo y la categoría usando expresiones regulares o limpieza simple
-            # Formato esperado: [ ] PLATILLO - X veces (CATEGORIA)
-            if "(" in linea and ")" in linea:
-                # Extraer categoría entre paréntesis
-                cat = linea.split('(')[-1].split(')')[0].strip().upper()
-                # Extraer nombre del platillo (lo que está después del [ ] y antes del -)
-                nombre = linea.replace("[ ]", "").split("-")[0].strip()
-                # Extraer cantidad
-                cant_match = re.search(r'(\d+)\s+veces', linea)
-                cant = int(cant_match.group(1)) if cant_match else 1
-                
-                # Agregar al pool tantas veces como diga la cantidad
+            linea_upper = linea.upper()
+            
+            # --- DETECTOR INTELIGENTE DE CATEGORÍAS ---
+            cat = "FUERTE" # Default
+            if "HUEVO" in linea_upper: cat = "HUEVO"
+            elif "CEMEX" in linea_upper: cat = "EMBUTIDOS"
+            elif "RES" in linea_upper: cat = "RES"
+            elif "CERDO" in linea_upper or "CHA " in linea_upper: cat = "CERDO"
+            elif "POLLO" in linea_upper: cat = "POLLO"
+            elif "PES" in linea_upper or "CAMARON" in linea_upper: cat = "PESCADO"
+
+            # Extraer el nombre del platillo
+            nombre = linea.replace("[ ]", "").split("(")[0].strip()
+            
+            # Extraer cantidad de servicios
+            cant_match = re.search(r'(\d+)\s+servicio', linea_upper)
+            cant = int(cant_match.group(1)) if cant_match else 1
+            
+            # Si es huevo, no lo metemos al pool de "fuertes" porque tiene su propia regla
+            if cat != "HUEVO":
                 for _ in range(cant):
                     inventario.append({"Platillo": nombre, "Cat": cat})
 
         # --- REGLAS DE DISTRIBUCIÓN ---
-        # Separar huevos y embutidos
         embutidos = [p for p in inventario if p['Cat'] == 'EMBUTIDOS']
-        # Proteínas para las comidas (Res, Pollo, Cerdo, Pescado)
-        fuertes = [p for p in inventario if p['Cat'] in ['RES', 'POLLO', 'CERDO', 'PESCADO']]
+        fuertes = [p for p in inventario if p['Cat'] != 'EMBUTIDOS']
         
         random.shuffle(fuertes)
         random.shuffle(embutidos)
         
         rango_fechas = pd.date_range(fecha_inicio, fecha_fin)
         calendario = []
-        ultima_cat_dia_anterior = ""
 
         for i, fecha in enumerate(rango_fechas):
             # --- REGLA DESAYUNO ---
             desayuno = ""
             cat_des = ""
             
-            # Huevo cada 2 días
-            if i % 2 == 0:
+            if i % 2 == 0: # Día sí, día no
                 desayuno = "🍳 HUEVOS AL GUSTO"
                 cat_des = "HUEVO"
-            # Si no toca huevo, intentar Embutido
             elif embutidos:
                 item = embutidos.pop(0)
                 desayuno = f"🥪 {item['Platillo']}"
                 cat_des = "EMBUTIDOS"
-            # Si no hay embutidos, ver si queda algo fuerte
             elif fuertes:
                 item = fuertes.pop(0)
                 desayuno = f"🌅 {item['Platillo']}"
                 cat_des = item['Cat']
             else:
-                desayuno = "☕ Desayuno Ligero / Libre"
-                cat_des = "LIBRE"
+                desayuno = "☕ Desayuno Ligero"
 
             # --- REGLA COMIDA ---
             comida = ""
             cat_com = ""
             
-            # Buscamos en los fuertes uno que NO sea igual al desayuno de hoy
-            p_encontrada = False
+            encontrado = False
             for idx, p in enumerate(fuertes):
-                if p['Cat'] != cat_des:
+                if p['Cat'] != cat_des: # Que no se repita proteína en el mismo día
                     item = fuertes.pop(idx)
                     comida = f"🍲 {item['Platillo']}"
                     cat_com = item['Cat']
-                    p_encontrada = True
+                    encontrado = True
                     break
             
-            if not p_encontrada:
+            if not encontrado:
                 comida = "🔄 Recalentado / Complemento"
-                cat_com = "LIBRE"
 
             calendario.append({
                 "Fecha": fecha.strftime('%d/%m'),
@@ -100,11 +98,10 @@ if st.button("GENERAR CALENDARIO"):
                 "COMIDA": comida
             })
 
-        # --- MOSTRAR RESULTADO ---
+        # --- TABLA FINAL ---
         st.markdown("---")
         df_final = pd.DataFrame(calendario)
         st.table(df_final)
         
-        st.download_button("Descargar Calendario", df_final.to_csv(index=False).encode('utf-8'), "calendario.csv")
     else:
-        st.error("Pega la lista de platillos para poder trabajar.")
+        st.error("Por favor pega la lista primero.")
