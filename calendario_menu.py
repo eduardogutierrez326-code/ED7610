@@ -5,163 +5,104 @@ import re
 from datetime import timedelta
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Calendario de Ejecución", layout="wide")
+st.set_page_config(page_title="Distribuidor 32 Platillos", layout="wide")
 
-# --- ESTILO PARA IMPRESIÓN (LIMPIEZA DE COLORES NEGROS) ---
+# --- ESTILO PARA IMPRESIÓN ---
 st.markdown("""
     <style>
     @media print {
-        html, body, .main, .block-container {
-            background-color: white !important;
-            color: black !important;
-        }
-        header, footer, .stSidebar, .stButton, .stTextArea, .stMarkdown, [data-testid="stHeader"], .print-btn-container {
-            display: none !important;
-        }
-        table {
-            width: 100% !important;
-            border-collapse: collapse !important;
-            background-color: white !important;
-            color: black !important;
-        }
-        th {
-            background-color: #f0f0f0 !important;
-            color: black !important;
-            border: 1px solid #ddd !important;
-        }
-        td {
-            border: 1px solid #ddd !important;
-            color: black !important;
-        }
-        h2 {
-            text-align: center !important;
-            color: black !important;
-            margin-top: 0 !important;
-        }
+        html, body, .main, .block-container { background-color: white !important; color: black !important; }
+        header, footer, .stSidebar, .stButton, .stTextArea, [data-testid="stHeader"] { display: none !important; }
+        table { width: 100% !important; border-collapse: collapse !important; }
+        th { background-color: #f0f0f0 !important; border: 1px solid #ddd !important; }
+        td { border: 1px solid #ddd !important; }
     }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("📅 DISTRIBUIDOR DE MENÚ (Meta: 32 Platillos)")
+st.title("📅 DISTRIBUIDOR INTELIGENTE (Balance 32)")
 
-# 1. ENTRADA DE FECHAS
-st.sidebar.header("🗓️ Configuración")
-fecha_inicio = st.sidebar.date_input("FECHA DE INICIO", value=pd.to_datetime("today"))
-# Ajustamos por defecto a 16 días (32 servicios)
-fecha_final = st.sidebar.date_input("FECHA FINAL", value=fecha_inicio + timedelta(days=15))
+# 1. CONFIGURACIÓN DE METAS (Lo que pidió tu esposa)
+meta = {
+    "RES": 6, "CERDO": 6, "POLLO": 6, 
+    "EMBUTIDOS": 6, "HUEVO": 5, "PESCADO": 3
+}
 
-dias_totales = (fecha_final - fecha_inicio).days + 1
-servicios_necesarios = dias_totales * 2
+# 2. FECHAS
+st.sidebar.header("🗓️ Rango de 16 días")
+fecha_inicio = st.sidebar.date_input("INICIO", value=pd.to_datetime("today"))
+fecha_final = fecha_inicio + timedelta(days=15) # Forzamos 16 días para los 32 platos
+st.sidebar.write(f"Finaliza el: **{fecha_final.strftime('%d/%m/%Y')}**")
 
-st.sidebar.markdown("---")
-st.sidebar.write(f"**Meta de Distribución:**")
-st.sidebar.write("🥩 Res: 6 | 🐷 Cerdo: 6")
-st.sidebar.write("🍗 Pollo: 6 | 🌭 Emb: 6")
-st.sidebar.write("🥚 Huevo: 5 | 🐟 Pes: 3")
-st.sidebar.markdown("---")
-st.sidebar.metric("Días Totales", f"{dias_totales}")
-st.sidebar.metric("Servicios Necesarios", f"{servicios_necesarios}")
+# 3. CARGA Y FILTRO
+st.subheader("1. Pega tu lista completa aquí")
+datos_input = st.text_area("Lista de la App de Presupuesto:", height=200)
 
-# 2. CARGA DE DATOS
-st.subheader("1. Pega tu lista de platillos")
-st.info(f"Pega la lista de los 32 platillos seleccionados para distribuirlos en {dias_totales} días.")
-datos_input = st.text_area("Copia y pega la lista aquí:", height=150)
-
-if st.button("GENERAR CALENDARIO"):
+if st.button("GENERAR CALENDARIO EQUILIBRADO"):
     if datos_input:
-        inventario = []
+        pool_sucio = []
         lineas = datos_input.strip().split('\n')
         
+        # Procesar cada línea y asignar categoría
         for linea in lineas:
-            linea_upper = linea.upper()
-            cat = "FUERTE" 
-            if "HUEVO" in linea_upper: cat = "HUEVO"
-            elif "CEMEX" in linea_upper or "EMBUTIDO" in linea_upper: cat = "EMBUTIDOS"
-            elif "RES" in linea_upper: cat = "RES"
-            elif "CERDO" in linea_upper or "CHA " in linea_upper: cat = "CERDO"
-            elif "POLLO" in linea_upper: cat = "POLLO"
-            elif "PES" in linea_upper or "CAMARON" in linea_upper or "PESCADO" in linea_upper: cat = "PESCADO"
-
-            nombre = linea.replace("[ ]", "").split("(")[0].strip()
-            # Detectar cantidad de servicios
-            cant_match = re.search(r'(\d+)\s+servicio', linea_upper)
-            cant = int(cant_match.group(1)) if cant_match else 1
+            l = linea.upper()
+            cat = "OTRO"
+            if "RES" in l: cat = "RES"
+            elif "CERDO" in l or "CHA " in l: cat = "CERDO"
+            elif "POLLO" in l: cat = "POLLO"
+            elif "CEMEX" in l or "EMBUTIDO" in l: cat = "EMBUTIDOS"
+            elif "HUEVO" in l: cat = "HUEVO"
+            elif "PES" in l or "CAMARON" in l or "ATUN" in l: cat = "PESCADO"
             
-            for _ in range(cant):
-                inventario.append({"Platillo": nombre, "Cat": cat})
+            nombre = linea.replace("[ ]", "").split("(")[0].strip()
+            pool_sucio.append({"nombre": nombre, "cat": cat})
 
-        # Mezclamos todo para que no salgan juntas las mismas proteínas
-        random.shuffle(inventario)
+        # --- FILTRO ESTRICTO DE CANTIDADES ---
+        inventario_final = []
+        for categoria, limite in meta.items():
+            platos_de_esta_cat = [p for p in pool_sucio if p['cat'] == categoria]
+            # Solo tomamos hasta el límite que pidió tu esposa (6, 5 o 3)
+            inventario_final.extend(platos_de_esta_cat[:limite])
+
+        # Verificación
+        if len(inventario_final) < 32:
+            st.warning(f"⚠️ Tu lista solo tiene {len(inventario_final)} platos válidos. Faltan {32 - len(inventario_final)} para completar la meta de 32.")
         
-        # Separar desayunables (Huevo y Embutidos) para priorizar la mañana
-        desayunables = [p for p in inventario if p['Cat'] in ['HUEVO', 'EMBUTIDOS']]
-        platos_fuertes = [p for p in inventario if p['Cat'] not in ['HUEVO', 'EMBUTIDOS']]
+        random.shuffle(inventario_final)
         
-        # Mezclar ambos grupos
-        random.shuffle(desayunables)
-        random.shuffle(platos_fuertes)
+        # Separar para el orden de las comidas
+        desayunos = [p for p in inventario_final if p['cat'] in ['HUEVO', 'EMBUTIDOS']]
+        comidas = [p for p in inventario_final if p['cat'] not in ['HUEVO', 'EMBUTIDOS']]
         
-        rango_fechas = pd.date_range(fecha_inicio, fecha_final)
+        rango = pd.date_range(fecha_inicio, fecha_final)
         calendario = []
 
-        for i, fecha in enumerate(rango_fechas):
-            # --- ASIGNAR DESAYUNO ---
-            desayuno = "Libre / Recalentado"
-            cat_des = "LIBRE"
+        for i, fecha in enumerate(rango):
+            # Desayuno
+            platillo_d = desayunos.pop(0) if desayunos else (comidas.pop(0) if comidas else {"nombre": "Libre", "cat": "X"})
             
-            if desayunables:
-                item = desayunables.pop(0)
-                desayuno = item['Platillo']
-                cat_des = item['Cat']
-            elif platos_fuertes:
-                item = platos_fuertes.pop(0)
-                desayuno = item['Platillo']
-                cat_des = item['Cat']
-
-            # --- ASIGNAR COMIDA ---
-            comida = "Recalentado"
-            cat_com = "LIBRE"
-            encontrado = False
-            
-            # Intentar buscar una proteína que no sea la misma del desayuno
-            for idx, p in enumerate(platos_fuertes):
-                if p['Cat'] != cat_des:
-                    item = platos_fuertes.pop(idx)
-                    comida = item['Platillo']
-                    cat_com = item['Cat']
-                    encontrado = True
+            # Comida (que no sea la misma proteína)
+            platillo_c = {"nombre": "Recalentado", "cat": "X"}
+            for idx, p in enumerate(comidas):
+                if p['cat'] != platillo_d['cat']:
+                    platillo_c = comidas.pop(idx)
                     break
-            
-            # Si no hay de otra o no hay platos diferentes, tomar el primero disponible
-            if not encontrado and platos_fuertes:
-                item = platos_fuertes.pop(0)
-                comida = item['Platillo']
-                cat_com = item['Cat']
+            if platillo_c['nombre'] == "Recalentado" and comidas:
+                platillo_c = comidas.pop(0)
 
             calendario.append({
                 "Fecha": fecha.strftime('%d/%m'),
                 "Día": fecha.strftime('%A'),
-                "DESAYUNO": desayuno,
-                "COMIDA": comida
+                "DESAYUNO": platillo_d['nombre'],
+                "COMIDA": platillo_c['nombre']
             })
 
-        st.markdown("---")
-        st.markdown(f"## 📋 MENÚ DEL {fecha_inicio.strftime('%d/%m')} AL {fecha_final.strftime('%d/%m')}")
+        # MOSTRAR
+        st.table(pd.DataFrame(calendario))
         
-        df_final = pd.DataFrame(calendario)
-        st.table(df_final)
-
-        # --- BOTÓN DE IMPRESIÓN ---
         components.html("""
-            <script>
-                function imprimir() {
-                    window.parent.print();
-                }
-            </script>
-            <button onclick="imprimir()" style="background-color: #FF4B4B; color: white; padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold; width: 100%;">
-                🖨️ GENERAR PDF / IMPRIMIR (Menú Equilibrado)
+            <script>function imprimir(){window.parent.print();}</script>
+            <button onclick="imprimir()" style="background-color: #FF4B4B; color: white; padding: 15px; border: none; border-radius: 8px; width: 100%; cursor: pointer;">
+               🖨️ IMPRIMIR MENÚ BALANCEADO (32 PLATOS)
             </button>
-        """, height=70)
-        
-    else:
-        st.error("Pega la lista de 32 platillos para organizar.")
+        """, height=80)
